@@ -41,6 +41,9 @@ android.api = 33
 # (int) Minimum API your APK will support
 android.minapi = 24
 
+# (str) Android NDK version to use - r25b is the stable standard for python-for-android
+android.ndk = 25b
+
 # (bool) Automatically accept SDK license
 android.accept_sdk_license = True
 

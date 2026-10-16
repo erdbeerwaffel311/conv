@@ -47,6 +47,8 @@ jobs:
     - name: Build Android APK with Buildozer
       working-directory: android_app
       run: |
+        export CFLAGS="$CFLAGS -Wno-error=incompatible-pointer-types -Wno-error=implicit-function-declaration"
+        export CPPFLAGS="$CPPFLAGS -Wno-error=implicit-function-declaration"
         buildozer android debug
 
     - name: Upload APK Artifact
