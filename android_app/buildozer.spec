@@ -59,8 +59,8 @@ android.allow_backup = True
 # (str) The format used to package the app for release mode (aab or apk)
 android.release_artifact = apk
 
-# (str) python-for-android branch to use (develop has the Android wheel tag fix)
-p4a.branch = develop
+# (str) python-for-android git clone directory
+p4a.source_dir = ../p4a_dir
 
 [buildozer]
 
