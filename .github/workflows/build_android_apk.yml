@@ -55,11 +55,13 @@ jobs:
         fi
         export CFLAGS="$CFLAGS -Wno-error=incompatible-pointer-types -Wno-error=implicit-function-declaration"
         export CPPFLAGS="$CPPFLAGS -Wno-error=implicit-function-declaration"
-        buildozer android debug || {
-          echo "=========================================="
-          echo "BUILDOZER FAILED - DIAGNOSTIC LOG DUMP"
-          echo "=========================================="
-          find .buildozer -name "*.log" -exec echo "--- LOG: {} ---" \; -exec tail -n 100 {} \; 2>/dev/null || true
+
+        set -o pipefail
+        buildozer android debug 2>&1 | tee ../buildozer_output.txt || {
+          echo "### Buildozer Fehlerbericht (Letzte 100 Zeilen)" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -n 100 ../buildozer_output.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
           exit 1
         }
 
