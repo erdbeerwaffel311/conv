@@ -41,6 +41,7 @@ import ffmpeg_utils
 import image_utils
 import document_utils
 import youtube_engine
+import android_native_picker
 
 
 def get_android_download_dir() -> str:
@@ -267,6 +268,7 @@ class YouTubeScreen(Screen):
         super().__init__(**kwargs)
         self.download_thread = None
         self.is_cancelled = False
+        self.last_downloaded_file = None
 
         scroll = ScrollView(
             do_scroll_x=False,
@@ -489,6 +491,20 @@ class YouTubeScreen(Screen):
         )
         self.btn_cancel.bind(on_release=self.cancel_download)
         btn_box.add_widget(self.btn_cancel)
+
+        self.btn_save_as = Button(
+            text="In individuellem Ordner speichern...",
+            size_hint_y=None,
+            height=dp(46),
+            background_normal="",
+            background_color=(0.14, 0.28, 0.22, 1),
+            color=(0.65, 0.95, 0.75, 1),
+            font_size="14sp",
+            bold=True,
+            disabled=True
+        )
+        self.btn_save_as.bind(on_release=self.prompt_save_as)
+        btn_box.add_widget(self.btn_save_as)
         content.add_widget(btn_box)
 
         # 6. Speicherort Info Karte
@@ -547,15 +563,37 @@ class YouTubeScreen(Screen):
             self.btn_cancel.disabled = True
             if success:
                 self.progress_bar.value = 100
+                self.last_downloaded_file = out_file
+                self.btn_save_as.disabled = False
                 self.lbl_status.text = "Download erfolgreich abgeschlossen!"
                 self.lbl_details.text = (
                     f"Datei gespeichert in:\n{out_file or get_android_download_dir()}\n"
                     "Sichtbar in der Samsung Galerie und 'Eigene Dateien'."
                 )
+                if out_file and os.path.isfile(out_file):
+                    android_native_picker.save_file_native(
+                        source_file_path=out_file,
+                        callback=self.on_save_as_completed
+                    )
             else:
                 self.lbl_status.text = "Download fehlgeschlagen"
                 self.lbl_details.text = f"Fehlermeldung: {message}"
         Clock.schedule_once(_finish)
+
+    def prompt_save_as(self, instance):
+        if self.last_downloaded_file and os.path.isfile(self.last_downloaded_file):
+            android_native_picker.save_file_native(
+                source_file_path=self.last_downloaded_file,
+                callback=self.on_save_as_completed
+            )
+
+    def on_save_as_completed(self, success, msg):
+        if success:
+            self.lbl_status.text = "Datei erfolgreich exportiert!"
+            self.lbl_details.text = msg
+        else:
+            if "abgebrochen" not in msg.lower():
+                self.lbl_details.text = msg
 
     def start_download(self, instance):
         url = self.url_input.text.strip()
@@ -607,6 +645,7 @@ class AudioVideoScreen(Screen):
         self.selected_file = None
         self.conv_thread = None
         self.is_cancelled = False
+        self.last_converted_file = None
 
         scroll = ScrollView(do_scroll_x=False, do_scroll_y=True, bar_width=dp(4))
         content = BoxLayout(
@@ -734,20 +773,39 @@ class AudioVideoScreen(Screen):
         )
         self.btn_cancel.bind(on_release=self.cancel_conversion)
         btn_box.add_widget(self.btn_cancel)
+
+        self.btn_save_as = Button(
+            text="In individuellem Ordner speichern...",
+            size_hint_y=None,
+            height=dp(46),
+            background_normal="",
+            background_color=(0.14, 0.28, 0.22, 1),
+            color=(0.65, 0.95, 0.75, 1),
+            font_size="14sp",
+            bold=True,
+            disabled=True
+        )
+        self.btn_save_as.bind(on_release=self.prompt_save_as)
+        btn_box.add_widget(self.btn_save_as)
         content.add_widget(btn_box)
 
         scroll.add_widget(content)
         self.add_widget(scroll)
 
     def open_file_picker(self, _):
-        picker = FilePickerModal(
-            on_selected=self.on_file_selected,
-            file_filters=[
-                "*.mp4", "*.mov", "*.mkv", "*.webm", "*.avi", "*.flv", "*.m4v",
-                "*.mp3", "*.wav", "*.flac", "*.aac", "*.m4a", "*.ogg", "*.opus", "*.aiff"
-            ]
+        launched = android_native_picker.open_file_native(
+            callback=self.on_file_selected,
+            mime_type="*/*"
         )
-        picker.open()
+        if not launched:
+            picker = FilePickerModal(
+                on_selected=self.on_file_selected,
+                file_filters=[
+                    "*.mp4", "*.mov", "*.mkv", "*.webm", "*.avi", "*.flv", "*.m4v",
+                    "*.mp3", "*.wav", "*.flac", "*.aac", "*.m4a", "*.ogg", "*.opus", "*.aiff"
+                ]
+            )
+            picker.open()
 
     def on_file_selected(self, path):
         self.selected_file = path
@@ -780,12 +838,34 @@ class AudioVideoScreen(Screen):
             self.btn_cancel.disabled = True
             if success:
                 self.progress_bar.value = 100
+                self.last_converted_file = out_file
+                self.btn_save_as.disabled = False
                 self.lbl_status.text = "Konvertierung erfolgreich!"
                 self.lbl_details.text = f"Gespeichert in:\n{out_file}"
+                if out_file and os.path.isfile(out_file):
+                    android_native_picker.save_file_native(
+                        source_file_path=out_file,
+                        callback=self.on_save_as_completed
+                    )
             else:
                 self.lbl_status.text = "Fehler bei der Konvertierung"
                 self.lbl_details.text = message
         Clock.schedule_once(_finish)
+
+    def prompt_save_as(self, instance):
+        if self.last_converted_file and os.path.isfile(self.last_converted_file):
+            android_native_picker.save_file_native(
+                source_file_path=self.last_converted_file,
+                callback=self.on_save_as_completed
+            )
+
+    def on_save_as_completed(self, success, msg):
+        if success:
+            self.lbl_status.text = "Datei erfolgreich exportiert!"
+            self.lbl_details.text = msg
+        else:
+            if "abgebrochen" not in msg.lower():
+                self.lbl_details.text = msg
 
     def start_conversion(self, _):
         if not self.selected_file or not os.path.isfile(self.selected_file):
@@ -835,6 +915,7 @@ class ImageScreen(Screen):
         super().__init__(**kwargs)
         self.selected_file = None
         self.conv_thread = None
+        self.last_converted_file = None
 
         scroll = ScrollView(do_scroll_x=False, do_scroll_y=True, bar_width=dp(4))
         content = BoxLayout(orientation="vertical", spacing=dp(16), padding=[dp(16), dp(16), dp(16), dp(28)], size_hint_y=None)
@@ -941,15 +1022,34 @@ class ImageScreen(Screen):
         self.btn_convert.bind(on_release=self.start_conversion)
         content.add_widget(self.btn_convert)
 
+        self.btn_save_as = Button(
+            text="In individuellem Ordner speichern...",
+            size_hint_y=None,
+            height=dp(46),
+            background_normal="",
+            background_color=(0.14, 0.28, 0.22, 1),
+            color=(0.65, 0.95, 0.75, 1),
+            font_size="14sp",
+            bold=True,
+            disabled=True
+        )
+        self.btn_save_as.bind(on_release=self.prompt_save_as)
+        content.add_widget(self.btn_save_as)
+
         scroll.add_widget(content)
         self.add_widget(scroll)
 
     def open_file_picker(self, _):
-        picker = FilePickerModal(
-            on_selected=self.on_file_selected,
-            file_filters=["*.jpg", "*.jpeg", "*.png", "*.webp", "*.bmp", "*.gif", "*.tiff", "*.ico", "*.heic"]
+        launched = android_native_picker.open_file_native(
+            callback=self.on_file_selected,
+            mime_type="image/*"
         )
-        picker.open()
+        if not launched:
+            picker = FilePickerModal(
+                on_selected=self.on_file_selected,
+                file_filters=["*.jpg", "*.jpeg", "*.png", "*.webp", "*.bmp", "*.gif", "*.tiff", "*.ico", "*.heic"]
+            )
+            picker.open()
 
     def on_file_selected(self, path):
         self.selected_file = path
@@ -976,12 +1076,34 @@ class ImageScreen(Screen):
             self.btn_convert.disabled = False
             if success:
                 self.progress_bar.value = 100
+                self.last_converted_file = out_file
+                self.btn_save_as.disabled = False
                 self.lbl_status.text = "Bild erfolgreich konvertiert!"
                 self.lbl_details.text = f"Gespeichert in:\n{out_file}\nIn Galerie und 'Eigene Dateien' sichtbar."
+                if out_file and os.path.isfile(out_file):
+                    android_native_picker.save_file_native(
+                        source_file_path=out_file,
+                        callback=self.on_save_as_completed
+                    )
             else:
                 self.lbl_status.text = "Fehler bei Bildkonvertierung"
                 self.lbl_details.text = message
         Clock.schedule_once(_finish)
+
+    def prompt_save_as(self, instance):
+        if self.last_converted_file and os.path.isfile(self.last_converted_file):
+            android_native_picker.save_file_native(
+                source_file_path=self.last_converted_file,
+                callback=self.on_save_as_completed
+            )
+
+    def on_save_as_completed(self, success, msg):
+        if success:
+            self.lbl_status.text = "Bild erfolgreich exportiert!"
+            self.lbl_details.text = msg
+        else:
+            if "abgebrochen" not in msg.lower():
+                self.lbl_details.text = msg
 
     def start_conversion(self, _):
         if not self.selected_file or not os.path.isfile(self.selected_file):
@@ -1025,6 +1147,7 @@ class DocumentScreen(Screen):
         super().__init__(**kwargs)
         self.selected_file = None
         self.conv_thread = None
+        self.last_converted_file = None
 
         scroll = ScrollView(do_scroll_x=False, do_scroll_y=True, bar_width=dp(4))
         content = BoxLayout(orientation="vertical", spacing=dp(16), padding=[dp(16), dp(16), dp(16), dp(28)], size_hint_y=None)
@@ -1104,15 +1227,34 @@ class DocumentScreen(Screen):
         self.btn_convert.bind(on_release=self.start_conversion)
         content.add_widget(self.btn_convert)
 
+        self.btn_save_as = Button(
+            text="In individuellem Ordner speichern...",
+            size_hint_y=None,
+            height=dp(46),
+            background_normal="",
+            background_color=(0.14, 0.28, 0.22, 1),
+            color=(0.65, 0.95, 0.75, 1),
+            font_size="14sp",
+            bold=True,
+            disabled=True
+        )
+        self.btn_save_as.bind(on_release=self.prompt_save_as)
+        content.add_widget(self.btn_save_as)
+
         scroll.add_widget(content)
         self.add_widget(scroll)
 
     def open_file_picker(self, _):
-        picker = FilePickerModal(
-            on_selected=self.on_file_selected,
-            file_filters=["*.csv", "*.xlsx", "*.xls", "*.json", "*.html", "*.pdf", "*.docx", "*.txt", "*.tsv"]
+        launched = android_native_picker.open_file_native(
+            callback=self.on_file_selected,
+            mime_type="*/*"
         )
-        picker.open()
+        if not launched:
+            picker = FilePickerModal(
+                on_selected=self.on_file_selected,
+                file_filters=["*.csv", "*.xlsx", "*.xls", "*.json", "*.html", "*.pdf", "*.docx", "*.txt", "*.tsv"]
+            )
+            picker.open()
 
     def on_file_selected(self, path):
         self.selected_file = path
@@ -1138,12 +1280,34 @@ class DocumentScreen(Screen):
             self.btn_convert.disabled = False
             if success:
                 self.progress_bar.value = 100
+                self.last_converted_file = out_file
+                self.btn_save_as.disabled = False
                 self.lbl_status.text = "Konvertierung erfolgreich abgeschlossen!"
                 self.lbl_details.text = f"Gespeichert in:\n{out_file}"
+                if out_file and os.path.isfile(out_file):
+                    android_native_picker.save_file_native(
+                        source_file_path=out_file,
+                        callback=self.on_save_as_completed
+                    )
             else:
                 self.lbl_status.text = "Konvertierung fehlgeschlagen"
                 self.lbl_details.text = message
         Clock.schedule_once(_finish)
+
+    def prompt_save_as(self, instance):
+        if self.last_converted_file and os.path.isfile(self.last_converted_file):
+            android_native_picker.save_file_native(
+                source_file_path=self.last_converted_file,
+                callback=self.on_save_as_completed
+            )
+
+    def on_save_as_completed(self, success, msg):
+        if success:
+            self.lbl_status.text = "Dokument erfolgreich exportiert!"
+            self.lbl_details.text = msg
+        else:
+            if "abgebrochen" not in msg.lower():
+                self.lbl_details.text = msg
 
     def start_conversion(self, _):
         if not self.selected_file or not os.path.isfile(self.selected_file):
@@ -1192,7 +1356,7 @@ class InfoScreen(Screen):
 
         t = WrappingLabel(text="Universal Media Converter", font_size="20sp", bold=True)
         v = WrappingLabel(
-            text="Version 2.1.1 (Samsung Galaxy A55 5G Vollversion)",
+            text="Version 2.1.2 (Samsung Galaxy A55 5G Vollversion)",
             font_size="13sp",
             color=(0.4, 0.7, 1, 1)
         )
