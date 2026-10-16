@@ -1,0 +1,44 @@
+# Virtual environments
+.venv/
+.venv_win/
+env/
+venv/
+
+# Python bytecode and cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# PyInstaller & Build artifacts
+build/
+dist/
+4_final/build/
+4_final/build_windows/
+4_final/dist/
+4_final/dist_windows/
+4_final/dmg_staging/
+*.spec.bak
+
+# Large generated binaries (GitHub rejects files > 100 MB)
+*.dmg
+*.zip
+*.exe
+*.apk
+*.aab
+4_final/*.dmg
+4_final/*.exe
+1_resources/ffmpeg.exe
+1_resources/ffprobe.exe
+1_resources/ffmpeg*.zip
+
+# Android Buildozer artifacts
+android_app/.buildozer/
+android_app/bin/
+
+# macOS system files
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
