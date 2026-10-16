@@ -16,11 +16,11 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,json
 
 # (str) Application versioning (method 1)
-version = 2.0.1
+version = 2.1.0
 
 # (list) Application requirements
 # Comma separated e.g. requirements = sqlite3,kivy
-requirements = python3,kivy,yt-dlp,certifi
+requirements = python3,kivy,pillow,pypdf,openpyxl,yt-dlp,certifi
 
 # (str) Presplash of the application
 presplash.filename = %(source.dir)s/icon.png
@@ -55,6 +55,9 @@ android.private_storage = True
 
 # (list) The Android archs to build for (Samsung Galaxy A55 5G is 64-bit ARM)
 android.archs = arm64-v8a
+
+# (list) Android native libraries to bundle into APK for arm64-v8a
+android.add_libs_arm64_v8a = libs/arm64-v8a/*.so
 
 # (bool) enables Android auto backup feature (Android API >=23)
 android.allow_backup = True

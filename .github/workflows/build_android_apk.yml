@@ -67,6 +67,13 @@ jobs:
         "
         pip install ./p4a_dir
 
+    - name: Download Prebuilt arm64 FFmpeg
+      run: |
+        mkdir -p android_app/libs/arm64-v8a
+        curl -sL "https://github.com/Khang-NT/ffmpeg-binary-android/releases/download/2018-07-31/arm64-v8a-full.tar.bz2" | tar -xj -C android_app/libs/arm64-v8a
+        mv android_app/libs/arm64-v8a/ffmpeg android_app/libs/arm64-v8a/libffmpeg.so
+        chmod +x android_app/libs/arm64-v8a/libffmpeg.so
+
     - name: Build Android APK with Buildozer
       working-directory: android_app
       run: |

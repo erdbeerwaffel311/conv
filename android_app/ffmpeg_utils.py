@@ -28,6 +28,27 @@ def find_binary(binary_name: str) -> Optional[str]:
                 if os.path.isfile(p) and os.access(p, os.X_OK):
                     return p
 
+    # Check Android native libraries directory
+    try:
+        from jnius import autoclass
+        PythonActivity = autoclass("org.kivy.android.PythonActivity")
+        context = PythonActivity.mActivity
+        if context:
+            lib_dir = context.getApplicationInfo().nativeLibraryDir
+            for name in [f"lib{binary_name}.so", binary_name]:
+                p = os.path.join(lib_dir, name)
+                if os.path.isfile(p) and os.access(p, os.X_OK):
+                    return p
+    except Exception:
+        pass
+
+    for ld_dir in os.environ.get("LD_LIBRARY_PATH", "").split(":"):
+        if ld_dir and os.path.isdir(ld_dir):
+            for name in [f"lib{binary_name}.so", binary_name]:
+                p = os.path.join(ld_dir, name)
+                if os.path.isfile(p) and os.access(p, os.X_OK):
+                    return p
+
     # Check standard PATH
     for name in candidate_names:
         p = shutil.which(name)

@@ -36,6 +36,7 @@ dist/
 # Android Buildozer artifacts
 android_app/.buildozer/
 android_app/bin/
+android_app/libs/
 
 # macOS system files
 .DS_Store

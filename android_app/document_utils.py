@@ -114,51 +114,122 @@ def convert_table_file(input_file: str, output_file: str, target_fmt: str, progr
         if progress_cb:
             progress_cb(20.0, "Lese Tabelle...")
 
-        if src_ext in [".xlsx", ".xls"]:
-            df = pd.read_excel(input_file)
-        elif src_ext in [".csv", ".tsv"]:
-            # Auto-detect separator
-            try:
-                df = pd.read_csv(input_file, sep=None, engine='python')
-            except Exception:
-                df = pd.read_csv(input_file)
+        if pd is not None:
+            if src_ext in [".xlsx", ".xls"]:
+                df = pd.read_excel(input_file)
+            elif src_ext in [".csv", ".tsv"]:
+                try:
+                    df = pd.read_csv(input_file, sep=None, engine='python')
+                except Exception:
+                    df = pd.read_csv(input_file)
+            else:
+                return False, f"Nicht unterstütztes Quellformat: {src_ext}"
+
+            if progress_cb:
+                progress_cb(60.0, f"Erzeuge {target_fmt}...")
+
+            if target_fmt == "CSV":
+                df.to_csv(output_file, index=False, encoding="utf-8-sig")
+            elif target_fmt == "XLSX":
+                df.to_excel(output_file, index=False, engine="openpyxl")
+            elif target_fmt == "JSON":
+                df.to_json(output_file, orient="records", indent=2, force_ascii=False)
+            elif target_fmt == "HTML":
+                df.to_html(output_file, index=False)
+            elif target_fmt == "PDF":
+                doc = SimpleDocTemplate(output_file, pagesize=A4, rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
+                elements = []
+                preview_df = df.head(100)
+                data = [[str(col)[:25] for col in preview_df.columns]]
+                for _, row in preview_df.iterrows():
+                    data.append([str(val)[:30] for val in row.values])
+                t = Table(data, repeatRows=1)
+                t.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2563eb')),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                    ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 8),
+                    ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
+                ]))
+                elements.append(t)
+                doc.build(elements)
         else:
-            return False, f"Nicht unterstütztes Quellformat: {src_ext}"
+            # Reiner Python-Standardbibliothek-Fallback fuer Tabellen (CSV, JSON, HTML, TXT)
+            import csv
+            import json
 
-        if progress_cb:
-            progress_cb(60.0, f"Erzeuge {target_fmt}...")
+            rows = []
+            if src_ext in [".csv", ".tsv", ".txt"]:
+                with open(input_file, "r", encoding="utf-8-sig", errors="ignore") as f:
+                    delimiter = "\t" if src_ext == ".tsv" else ","
+                    try:
+                        reader = csv.reader(f, delimiter=delimiter)
+                        rows = list(reader)
+                    except Exception:
+                        f.seek(0)
+                        reader = csv.reader(f)
+                        rows = list(reader)
+            elif src_ext == ".json":
+                with open(input_file, "r", encoding="utf-8", errors="ignore") as f:
+                    data = json.load(f)
+                if isinstance(data, list) and len(data) > 0 and isinstance(data[0], dict):
+                    headers = list(data[0].keys())
+                    rows = [headers] + [[str(item.get(h, "")) for h in headers] for item in data]
+            elif src_ext in [".xlsx", ".xls"]:
+                try:
+                    import openpyxl
+                    wb = openpyxl.load_workbook(input_file, data_only=True)
+                    ws = wb.active
+                    for r in ws.iter_rows(values_only=True):
+                        rows.append([str(c) if c is not None else "" for c in r])
+                except Exception as e:
+                    return False, f"Fehler beim Lesen der Excel-Datei: {str(e)}"
+            else:
+                return False, f"Nicht unterstütztes Quellformat: {src_ext}"
 
-        if target_fmt == "CSV":
-            df.to_csv(output_file, index=False, encoding="utf-8-sig")
-        elif target_fmt == "XLSX":
-            df.to_excel(output_file, index=False, engine="openpyxl")
-        elif target_fmt == "JSON":
-            df.to_json(output_file, orient="records", indent=2, force_ascii=False)
-        elif target_fmt == "HTML":
-            df.to_html(output_file, index=False)
-        elif target_fmt == "PDF":
-            # Generate table PDF with reportlab
-            doc = SimpleDocTemplate(output_file, pagesize=A4, rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
-            elements = []
-            
-            # Limit width/cols for clean rendering
-            preview_df = df.head(100) # up to 100 rows
-            data = [[str(col)[:25] for col in preview_df.columns]]
-            for _, row in preview_df.iterrows():
-                data.append([str(val)[:30] for val in row.values])
+            if not rows:
+                return False, "Die Datei enthält keine lesbaren Tabellendaten."
 
-            t = Table(data, repeatRows=1)
-            t.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2563eb')),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, -1), 8),
-                ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
-                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
-            ]))
-            elements.append(t)
-            doc.build(elements)
+            if progress_cb:
+                progress_cb(60.0, f"Erzeuge {target_fmt}...")
+
+            if target_fmt == "CSV":
+                with open(output_file, "w", newline="", encoding="utf-8-sig") as f:
+                    writer = csv.writer(f)
+                    writer.writerows(rows)
+            elif target_fmt == "JSON":
+                headers = rows[0]
+                records = []
+                for row in rows[1:]:
+                    record = {headers[i]: row[i] if i < len(row) else "" for i in range(len(headers))}
+                    records.append(record)
+                with open(output_file, "w", encoding="utf-8") as f:
+                    json.dump(records, f, indent=2, ensure_ascii=False)
+            elif target_fmt == "HTML":
+                html = ["<!DOCTYPE html><html><head><meta charset='utf-8'><style>table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:8px}th{background-color:#2563eb;color:white}</style></head><body><table>"]
+                if rows:
+                    html.append("<tr>" + "".join(f"<th>{c}</th>" for c in rows[0]) + "</tr>")
+                    for row in rows[1:]:
+                        html.append("<tr>" + "".join(f"<td>{c}</td>" for c in row) + "</tr>")
+                html.append("</table></body></html>")
+                with open(output_file, "w", encoding="utf-8") as f:
+                    f.write("\n".join(html))
+            elif target_fmt == "XLSX":
+                try:
+                    import openpyxl
+                    wb = openpyxl.Workbook()
+                    ws = wb.active
+                    for r in rows:
+                        ws.append(r)
+                    wb.save(output_file)
+                except Exception as e:
+                    return False, f"Excel-Export erfordert openpyxl: {str(e)}"
+            elif target_fmt == "TXT":
+                with open(output_file, "w", encoding="utf-8") as f:
+                    for row in rows:
+                        f.write("\t".join(row) + "\n")
 
         if progress_cb:
             progress_cb(100.0, "Fertig!")

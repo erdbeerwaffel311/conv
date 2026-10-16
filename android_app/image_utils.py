@@ -6,11 +6,14 @@ import subprocess
 from typing import Callable, Dict, Optional, Tuple, List
 try:
     from PIL import Image
-    import pillow_heif
-    # Register HEIF opener so PIL natively handles HEIC/HEIF files
-    pillow_heif.register_heif_opener()
 except ImportError:
     Image = None
+
+try:
+    import pillow_heif
+    pillow_heif.register_heif_opener()
+except ImportError:
+    pass
 
 
 IMAGE_FORMATS = {
@@ -100,6 +103,19 @@ def convert_image(
         q_val = 85
     elif "75%" in quality_str:
         q_val = 75
+
+    if Image is None:
+        try:
+            from kivy.core.image import Image as CoreImage
+            if progress_callback:
+                progress_callback(50.0, "Konvertiere Bild...")
+            core_img = CoreImage(input_file)
+            core_img.save(output_file)
+            if progress_callback:
+                progress_callback(100.0, "Fertig!")
+            return True, f"Bild erfolgreich als {target_fmt} gespeichert."
+        except Exception as e:
+            return False, f"Bildverarbeitung erfordert Pillow: {str(e)}"
 
     try:
         # Native macOS sips fallback for HEIC if needed, but Pillow with pillow_heif handles it
