@@ -41,6 +41,9 @@ android.api = 33
 # (int) Minimum API your APK will support
 android.minapi = 24
 
+# (bool) Automatically accept SDK license
+android.accept_sdk_license = True
+
 # (bool) Use --private data storage (True) or --dir public storage (False)
 android.private_storage = True
 
@@ -56,7 +59,7 @@ android.release_artifact = apk
 [buildozer]
 
 # (int) Log level (0 = error only, 1 = info, 2 = debug (with command output))
-log_level = 2
+log_level = 1
 
 # (int) Display warning if buildozer is run as root (0 = False, 1 = True)
 warn_on_root = 1
