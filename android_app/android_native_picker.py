@@ -4,7 +4,6 @@ Enables native file open dialog (ACTION_OPEN_DOCUMENT) and native save dialog (A
 """
 
 import os
-import shutil
 import threading
 from typing import Callable, Optional
 
@@ -12,7 +11,7 @@ from typing import Callable, Optional
 IS_ANDROID = False
 try:
     from jnius import autoclass
-    import android.activity
+    from android import activity
     PythonActivity = autoclass("org.kivy.android.PythonActivity")
     Intent = autoclass("android.content.Intent")
     Activity = autoclass("android.app.Activity")
@@ -80,9 +79,16 @@ def _on_activity_result(request_code, result_code, intent):
                 uri = intent.getData()
                 if uri:
                     def _copy_worker():
-                        local_path = _copy_content_uri_to_cache(uri)
-                        if local_path and callback:
-                            Clock.schedule_once(lambda _: callback(local_path), 0)
+                        try:
+                            local_path = _copy_content_uri_to_cache(uri)
+                            if local_path and callback:
+                                Clock.schedule_once(lambda _: callback(local_path), 0)
+                        finally:
+                            try:
+                                import jnius
+                                jnius.detach()
+                            except Exception:
+                                pass
                     threading.Thread(target=_copy_worker, daemon=True).start()
 
         # 2. Save File Result
@@ -93,9 +99,16 @@ def _on_activity_result(request_code, result_code, intent):
                 target_uri = intent.getData()
                 if target_uri:
                     def _write_worker():
-                        success, msg = _write_file_to_content_uri(source_file, target_uri)
-                        if callback:
-                            Clock.schedule_once(lambda _: callback(success, msg), 0)
+                        try:
+                            success, msg = _write_file_to_content_uri(source_file, target_uri)
+                            if callback:
+                                Clock.schedule_once(lambda _: callback(success, msg), 0)
+                        finally:
+                            try:
+                                import jnius
+                                jnius.detach()
+                            except Exception:
+                                pass
                     threading.Thread(target=_write_worker, daemon=True).start()
             elif callback:
                 Clock.schedule_once(lambda _: callback(False, "Speichern abgebrochen."), 0)
@@ -105,7 +118,7 @@ def _on_activity_result(request_code, result_code, intent):
 
 if IS_ANDROID:
     try:
-        android.activity.bind(on_activity_result=_on_activity_result)
+        activity.bind(on_activity_result=_on_activity_result)
     except Exception as e:
         print(f"Failed to bind activity result: {e}")
 
@@ -113,8 +126,8 @@ if IS_ANDROID:
 def _copy_content_uri_to_cache(uri) -> Optional[str]:
     """Copies content from a content:// Uri to a real file path in the app cache directory."""
     try:
-        activity = PythonActivity.mActivity
-        content_resolver = activity.getContentResolver()
+        activity_obj = PythonActivity.mActivity
+        content_resolver = activity_obj.getContentResolver()
 
         display_name = "ausgewaehlte_datei"
         cursor = None
@@ -130,17 +143,52 @@ def _copy_content_uri_to_cache(uri) -> Optional[str]:
             if cursor is not None:
                 cursor.close()
 
-        cache_dir = activity.getCacheDir().getAbsolutePath()
+        cache_dir = activity_obj.getCacheDir().getAbsolutePath()
         os.makedirs(cache_dir, exist_ok=True)
         dest_path = os.path.join(cache_dir, display_name)
 
-        pfd = content_resolver.openFileDescriptor(uri, "r")
-        if pfd is not None:
-            fd = pfd.detachFd()
-            with os.fdopen(fd, "rb") as in_f, open(dest_path, "wb") as out_f:
-                shutil.copyfileobj(in_f, out_f, length=64 * 1024)
-            return dest_path
+        input_stream = content_resolver.openInputStream(uri)
+        if input_stream is None:
+            return None
 
+        FileOutputStream = autoclass("java.io.FileOutputStream")
+        File = autoclass("java.io.File")
+        Channels = autoclass("java.nio.channels.Channels")
+
+        dest_file = File(dest_path)
+        out_stream = FileOutputStream(dest_file)
+        in_channel = Channels.newChannel(input_stream)
+        out_channel = out_stream.getChannel()
+
+        try:
+            CHUNK = 16 * 1024 * 1024
+            pos = 0
+            while True:
+                transferred = out_channel.transferFrom(in_channel, pos, CHUNK)
+                if transferred <= 0:
+                    break
+                pos += transferred
+        finally:
+            try:
+                in_channel.close()
+            except Exception:
+                pass
+            try:
+                input_stream.close()
+            except Exception:
+                pass
+            try:
+                out_channel.close()
+            except Exception:
+                pass
+            try:
+                out_stream.flush()
+                out_stream.close()
+            except Exception:
+                pass
+
+        if os.path.isfile(dest_path) and os.path.getsize(dest_path) > 0:
+            return dest_path
         return None
     except Exception as e:
         print(f"Error copying URI to cache: {e}")
@@ -150,16 +198,62 @@ def _copy_content_uri_to_cache(uri) -> Optional[str]:
 def _write_file_to_content_uri(source_file: str, target_uri) -> tuple:
     """Writes a local file to a destination content:// Uri chosen by the user."""
     try:
-        activity = PythonActivity.mActivity
-        content_resolver = activity.getContentResolver()
+        if not os.path.isfile(source_file):
+            return False, f"Quelldatei nicht gefunden: {source_file}"
 
-        pfd = content_resolver.openFileDescriptor(target_uri, "w")
-        if pfd is not None:
-            fd = pfd.detachFd()
-            with open(source_file, "rb") as in_f, os.fdopen(fd, "wb") as out_f:
-                shutil.copyfileobj(in_f, out_f, length=64 * 1024)
-            return True, "Datei erfolgreich im ausgewählten Ordner gespeichert!"
-        return False, "Konnte Zielort nicht öffnen."
+        file_size = os.path.getsize(source_file)
+        if file_size == 0:
+            return False, "Quelldatei ist leer (0 Bytes)."
+
+        activity_obj = PythonActivity.mActivity
+        content_resolver = activity_obj.getContentResolver()
+
+        # Open target OutputStream with 'wt' (write + truncate)
+        out_stream = content_resolver.openOutputStream(target_uri, "wt")
+        if out_stream is None:
+            out_stream = content_resolver.openOutputStream(target_uri)
+        if out_stream is None:
+            return False, "Konnte Zielort nicht zum Schreiben öffnen."
+
+        FileInputStream = autoclass("java.io.FileInputStream")
+        File = autoclass("java.io.File")
+        Channels = autoclass("java.nio.channels.Channels")
+
+        in_file = File(source_file)
+        in_stream = FileInputStream(in_file)
+        in_channel = in_stream.getChannel()
+        out_channel = Channels.newChannel(out_stream)
+
+        try:
+            transferred = 0
+            size = in_channel.size()
+            while transferred < size:
+                sent = in_channel.transferTo(transferred, size - transferred, out_channel)
+                if sent <= 0:
+                    break
+                transferred += sent
+        finally:
+            try:
+                out_channel.close()
+            except Exception:
+                pass
+            try:
+                out_stream.flush()
+                out_stream.close()
+            except Exception:
+                pass
+            try:
+                in_channel.close()
+            except Exception:
+                pass
+            try:
+                in_stream.close()
+            except Exception:
+                pass
+
+        filename = os.path.basename(source_file)
+        size_mb = file_size / (1024 * 1024)
+        return True, f"'{filename}' ({size_mb:.1f} MB) erfolgreich gespeichert!"
     except Exception as e:
         return False, f"Fehler beim Speichern: {str(e)}"
 
@@ -177,12 +271,12 @@ def open_file_native(callback: Callable[[str], None], mime_type: str = "*/*") ->
         req_id = _get_next_req_id(REQ_OPEN_BASE)
         _open_callbacks[req_id] = callback
 
-        activity = PythonActivity.mActivity
+        activity_obj = PythonActivity.mActivity
         intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
         intent.addCategory(Intent.CATEGORY_OPENABLE)
         intent.setType(mime_type)
 
-        activity.startActivityForResult(intent, req_id)
+        activity_obj.startActivityForResult(intent, req_id)
         return True
     except Exception as e:
         print(f"Failed to launch native file picker: {e}")
@@ -206,17 +300,20 @@ def save_file_native(
         filename = default_name or os.path.basename(source_file_path)
         resolved_mime = mime_type if mime_type else _guess_mime_type(filename)
 
+        base_title, ext = os.path.splitext(filename)
+        title_to_set = base_title if (ext and resolved_mime != "*/*") else filename
+
         req_id = _get_next_req_id(REQ_SAVE_BASE)
         _save_callbacks[req_id] = callback
         _pending_save_paths[req_id] = source_file_path
 
-        activity = PythonActivity.mActivity
+        activity_obj = PythonActivity.mActivity
         intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
         intent.addCategory(Intent.CATEGORY_OPENABLE)
         intent.setType(resolved_mime)
-        intent.putExtra(Intent.EXTRA_TITLE, filename)
+        intent.putExtra(Intent.EXTRA_TITLE, title_to_set)
 
-        activity.startActivityForResult(intent, req_id)
+        activity_obj.startActivityForResult(intent, req_id)
         return True
     except Exception as e:
         print(f"Failed to launch native save dialog: {e}")

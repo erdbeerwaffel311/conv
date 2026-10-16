@@ -493,7 +493,7 @@ class YouTubeScreen(Screen):
         btn_box.add_widget(self.btn_cancel)
 
         self.btn_save_as = Button(
-            text="In individuellem Ordner speichern...",
+            text="Datei exportieren / Speichern unter",
             size_hint_y=None,
             height=dp(46),
             background_normal="",
@@ -582,6 +582,8 @@ class YouTubeScreen(Screen):
 
     def prompt_save_as(self, instance):
         if self.last_downloaded_file and os.path.isfile(self.last_downloaded_file):
+            self.lbl_status.text = "Speicherort-Auswahl geöffnet"
+            self.lbl_details.text = "Wählen Sie den gewünschten Ordner auf Ihrem Gerät..."
             android_native_picker.save_file_native(
                 source_file_path=self.last_downloaded_file,
                 callback=self.on_save_as_completed
@@ -589,11 +591,18 @@ class YouTubeScreen(Screen):
 
     def on_save_as_completed(self, success, msg):
         if success:
-            self.lbl_status.text = "Datei erfolgreich exportiert!"
-            self.lbl_details.text = msg
+            self.lbl_status.text = "Erfolgreich gespeichert!"
+            self.lbl_details.text = f"{msg}\nSie können die Datei jetzt in Ihren Eigenen Dateien oder der Galerie öffnen."
         else:
-            if "abgebrochen" not in msg.lower():
-                self.lbl_details.text = msg
+            if "abgebrochen" in msg.lower():
+                self.lbl_status.text = "Download abgeschlossen"
+                self.lbl_details.text = (
+                    f"Die Datei liegt weiterhin sicher in:\n{self.last_downloaded_file or get_android_download_dir()}\n"
+                    "Tippen Sie auf 'Datei exportieren / Speichern unter', um einen anderen Ordner zu wählen."
+                )
+            else:
+                self.lbl_status.text = "Hinweis zum Speicherort"
+                self.lbl_details.text = f"{msg}\nOriginaldatei liegt in:\n{self.last_downloaded_file}"
 
     def start_download(self, instance):
         url = self.url_input.text.strip()
@@ -775,7 +784,7 @@ class AudioVideoScreen(Screen):
         btn_box.add_widget(self.btn_cancel)
 
         self.btn_save_as = Button(
-            text="In individuellem Ordner speichern...",
+            text="Datei exportieren / Speichern unter",
             size_hint_y=None,
             height=dp(46),
             background_normal="",
@@ -854,6 +863,8 @@ class AudioVideoScreen(Screen):
 
     def prompt_save_as(self, instance):
         if self.last_converted_file and os.path.isfile(self.last_converted_file):
+            self.lbl_status.text = "Speicherort-Auswahl geöffnet"
+            self.lbl_details.text = "Wählen Sie den gewünschten Ordner auf Ihrem Gerät..."
             android_native_picker.save_file_native(
                 source_file_path=self.last_converted_file,
                 callback=self.on_save_as_completed
@@ -861,11 +872,18 @@ class AudioVideoScreen(Screen):
 
     def on_save_as_completed(self, success, msg):
         if success:
-            self.lbl_status.text = "Datei erfolgreich exportiert!"
-            self.lbl_details.text = msg
+            self.lbl_status.text = "Erfolgreich gespeichert!"
+            self.lbl_details.text = f"{msg}\nSie können die Datei jetzt in Ihren Eigenen Dateien oder der Galerie öffnen."
         else:
-            if "abgebrochen" not in msg.lower():
-                self.lbl_details.text = msg
+            if "abgebrochen" in msg.lower():
+                self.lbl_status.text = "Konvertierung abgeschlossen"
+                self.lbl_details.text = (
+                    f"Die Datei liegt weiterhin sicher in:\n{self.last_converted_file or get_android_download_dir()}\n"
+                    "Tippen Sie auf 'Datei exportieren / Speichern unter', um einen anderen Ordner zu wählen."
+                )
+            else:
+                self.lbl_status.text = "Hinweis zum Speicherort"
+                self.lbl_details.text = f"{msg}\nOriginaldatei liegt in:\n{self.last_converted_file}"
 
     def start_conversion(self, _):
         if not self.selected_file or not os.path.isfile(self.selected_file):
@@ -1023,7 +1041,7 @@ class ImageScreen(Screen):
         content.add_widget(self.btn_convert)
 
         self.btn_save_as = Button(
-            text="In individuellem Ordner speichern...",
+            text="Datei exportieren / Speichern unter",
             size_hint_y=None,
             height=dp(46),
             background_normal="",
@@ -1092,6 +1110,8 @@ class ImageScreen(Screen):
 
     def prompt_save_as(self, instance):
         if self.last_converted_file and os.path.isfile(self.last_converted_file):
+            self.lbl_status.text = "Speicherort-Auswahl geöffnet"
+            self.lbl_details.text = "Wählen Sie den gewünschten Ordner auf Ihrem Gerät..."
             android_native_picker.save_file_native(
                 source_file_path=self.last_converted_file,
                 callback=self.on_save_as_completed
@@ -1099,11 +1119,18 @@ class ImageScreen(Screen):
 
     def on_save_as_completed(self, success, msg):
         if success:
-            self.lbl_status.text = "Bild erfolgreich exportiert!"
-            self.lbl_details.text = msg
+            self.lbl_status.text = "Bild erfolgreich gespeichert!"
+            self.lbl_details.text = f"{msg}\nSie können das Bild jetzt in der Galerie oder Ihren Eigenen Dateien öffnen."
         else:
-            if "abgebrochen" not in msg.lower():
-                self.lbl_details.text = msg
+            if "abgebrochen" in msg.lower():
+                self.lbl_status.text = "Bild konvertiert"
+                self.lbl_details.text = (
+                    f"Die Datei liegt weiterhin sicher in:\n{self.last_converted_file or get_android_download_dir()}\n"
+                    "Tippen Sie auf 'Datei exportieren / Speichern unter', um einen anderen Ordner zu wählen."
+                )
+            else:
+                self.lbl_status.text = "Hinweis zum Speicherort"
+                self.lbl_details.text = f"{msg}\nOriginaldatei liegt in:\n{self.last_converted_file}"
 
     def start_conversion(self, _):
         if not self.selected_file or not os.path.isfile(self.selected_file):
@@ -1228,7 +1255,7 @@ class DocumentScreen(Screen):
         content.add_widget(self.btn_convert)
 
         self.btn_save_as = Button(
-            text="In individuellem Ordner speichern...",
+            text="Datei exportieren / Speichern unter",
             size_hint_y=None,
             height=dp(46),
             background_normal="",
@@ -1296,6 +1323,8 @@ class DocumentScreen(Screen):
 
     def prompt_save_as(self, instance):
         if self.last_converted_file and os.path.isfile(self.last_converted_file):
+            self.lbl_status.text = "Speicherort-Auswahl geöffnet"
+            self.lbl_details.text = "Wählen Sie den gewünschten Ordner auf Ihrem Gerät..."
             android_native_picker.save_file_native(
                 source_file_path=self.last_converted_file,
                 callback=self.on_save_as_completed
@@ -1303,11 +1332,18 @@ class DocumentScreen(Screen):
 
     def on_save_as_completed(self, success, msg):
         if success:
-            self.lbl_status.text = "Dokument erfolgreich exportiert!"
-            self.lbl_details.text = msg
+            self.lbl_status.text = "Dokument erfolgreich gespeichert!"
+            self.lbl_details.text = f"{msg}\nSie können das Dokument jetzt in Ihren Eigenen Dateien öffnen."
         else:
-            if "abgebrochen" not in msg.lower():
-                self.lbl_details.text = msg
+            if "abgebrochen" in msg.lower():
+                self.lbl_status.text = "Dokument konvertiert"
+                self.lbl_details.text = (
+                    f"Die Datei liegt weiterhin sicher in:\n{self.last_converted_file or get_android_download_dir()}\n"
+                    "Tippen Sie auf 'Datei exportieren / Speichern unter', um einen anderen Ordner zu wählen."
+                )
+            else:
+                self.lbl_status.text = "Hinweis zum Speicherort"
+                self.lbl_details.text = f"{msg}\nOriginaldatei liegt in:\n{self.last_converted_file}"
 
     def start_conversion(self, _):
         if not self.selected_file or not os.path.isfile(self.selected_file):
@@ -1356,7 +1392,7 @@ class InfoScreen(Screen):
 
         t = WrappingLabel(text="Universal Media Converter", font_size="20sp", bold=True)
         v = WrappingLabel(
-            text="Version 2.1.2 (Samsung Galaxy A55 5G Vollversion)",
+            text="Version 2.1.3 (Samsung Galaxy A55 5G Vollversion)",
             font_size="13sp",
             color=(0.4, 0.7, 1, 1)
         )
