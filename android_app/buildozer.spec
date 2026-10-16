@@ -20,7 +20,7 @@ version = 2.0.0
 
 # (list) Application requirements
 # Comma separated e.g. requirements = sqlite3,kivy
-requirements = python3,kivy,charset-normalizer==2.1.1,yt-dlp,certifi
+requirements = python3,kivy,yt-dlp,certifi
 
 # (str) Presplash of the application
 presplash.filename = %(source.dir)s/icon.png
@@ -58,6 +58,9 @@ android.allow_backup = True
 
 # (str) The format used to package the app for release mode (aab or apk)
 android.release_artifact = apk
+
+# (str) python-for-android branch to use (develop has the Android wheel tag fix)
+p4a.branch = develop
 
 [buildozer]
 
