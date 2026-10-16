@@ -119,53 +119,60 @@ def download_youtube_media(
         "progress_hooks": [ydl_progress_hook],
     })
 
+    has_ffmpeg = bool(FFMPEG_PATH or find_binary("ffmpeg"))
     postprocessors = []
 
     if is_audio:
         # Audio Extraction
         audio_ext = target_format.lower()
-        ydl_opts["format"] = "bestaudio/best"
+        if has_ffmpeg:
+            ydl_opts["format"] = "bestaudio/best"
+            pp_audio = {
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": audio_ext,
+            }
+            if target_format == "MP3":
+                bitrate_clean = quality.replace("k", "") if quality.endswith("k") else "320"
+                pp_audio["preferredquality"] = bitrate_clean
+            postprocessors.append(pp_audio)
 
-        pp_audio = {
-            "key": "FFmpegExtractAudio",
-            "preferredcodec": audio_ext,
-        }
-        if target_format == "MP3":
-            bitrate_clean = quality.replace("k", "") if quality.endswith("k") else "320"
-            pp_audio["preferredquality"] = bitrate_clean
-        postprocessors.append(pp_audio)
-
-        # Thumbnail & Metadata embedding
-        if embed_thumbnail and target_format in ["MP3", "M4A", "FLAC"]:
-            ydl_opts["writethumbnail"] = True
-            postprocessors.append({"key": "FFmpegMetadata", "add_metadata": True})
-            postprocessors.append({"key": "EmbedThumbnail", "already_have_thumbnail": False})
+            if embed_thumbnail and target_format in ["MP3", "M4A", "FLAC"]:
+                ydl_opts["writethumbnail"] = True
+                postprocessors.append({"key": "FFmpegMetadata", "add_metadata": True})
+                postprocessors.append({"key": "EmbedThumbnail", "already_have_thumbnail": False})
+        else:
+            # Standalone Android mode without FFmpeg: download YouTube's native M4A/AAC audio directly
+            ydl_opts["format"] = "bestaudio[ext=m4a]/bestaudio/best"
     else:
         # Video Download
-        if quality in ["2160p", "4K"]:
-            format_spec = "bestvideo[height<=2160]+bestaudio/best[height<=2160]/best"
-        elif quality == "1440p":
-            format_spec = "bestvideo[height<=1440]+bestaudio/best[height<=1440]/best"
-        elif quality == "1080p":
-            format_spec = "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best"
-        elif quality == "720p":
-            format_spec = "bestvideo[height<=720]+bestaudio/best[height<=720]/best"
-        elif quality == "480p":
-            format_spec = "bestvideo[height<=480]+bestaudio/best[height<=480]/best"
-        else:
-            format_spec = "bestvideo+bestaudio/best"
-
-        ydl_opts["format"] = format_spec
         video_ext = target_format.lower()
-        ydl_opts["merge_output_format"] = video_ext if video_ext in ["mp4", "mkv", "mov", "webm"] else "mp4"
+        if has_ffmpeg:
+            if quality in ["2160p", "4K"]:
+                format_spec = "bestvideo[height<=2160]+bestaudio/best[height<=2160]/best"
+            elif quality == "1440p":
+                format_spec = "bestvideo[height<=1440]+bestaudio/best[height<=1440]/best"
+            elif quality == "1080p":
+                format_spec = "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best"
+            elif quality == "720p":
+                format_spec = "bestvideo[height<=720]+bestaudio/best[height<=720]/best"
+            elif quality == "480p":
+                format_spec = "bestvideo[height<=480]+bestaudio/best[height<=480]/best"
+            else:
+                format_spec = "bestvideo+bestaudio/best"
 
-        if embed_thumbnail:
-            ydl_opts["writethumbnail"] = True
-            postprocessors.append({"key": "FFmpegMetadata", "add_metadata": True})
-            if video_ext in ["mp4", "mkv", "mov"]:
-                postprocessors.append({"key": "EmbedThumbnail", "already_have_thumbnail": False})
+            ydl_opts["format"] = format_spec
+            ydl_opts["merge_output_format"] = video_ext if video_ext in ["mp4", "mkv", "mov", "webm"] else "mp4"
 
-    if postprocessors:
+            if embed_thumbnail:
+                ydl_opts["writethumbnail"] = True
+                postprocessors.append({"key": "FFmpegMetadata", "add_metadata": True})
+                if video_ext in ["mp4", "mkv", "mov"]:
+                    postprocessors.append({"key": "EmbedThumbnail", "already_have_thumbnail": False})
+        else:
+            # Standalone Android mode without FFmpeg: download YouTube's pre-muxed MP4 directly
+            ydl_opts["format"] = "best[ext=mp4]/best"
+
+    if postprocessors and has_ffmpeg:
         ydl_opts["postprocessors"] = postprocessors
 
     try:

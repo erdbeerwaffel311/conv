@@ -16,7 +16,7 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,json
 
 # (str) Application versioning (method 1)
-version = 2.0.0
+version = 2.0.1
 
 # (list) Application requirements
 # Comma separated e.g. requirements = sqlite3,kivy
@@ -30,6 +30,9 @@ icon.filename = %(source.dir)s/icon.png
 
 # (str) Supported orientation (one of landscape, sensorLandscape, portrait or all)
 orientation = portrait
+
+# (bool) Indicate if the application should be fullscreen or not
+fullscreen = 0
 
 # (list) Permissions
 android.permissions = INTERNET,ACCESS_NETWORK_STATE,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,READ_MEDIA_AUDIO,READ_MEDIA_VIDEO,READ_MEDIA_IMAGES
