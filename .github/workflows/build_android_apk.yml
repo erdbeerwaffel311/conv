@@ -55,6 +55,7 @@ jobs:
         fi
         export CFLAGS="$CFLAGS -Wno-error=incompatible-pointer-types -Wno-error=implicit-function-declaration"
         export CPPFLAGS="$CPPFLAGS -Wno-error=implicit-function-declaration"
+        export CHARSET_NORMALIZER_USE_MYPYC=0
 
         set -o pipefail
         buildozer android debug 2>&1 | tee ../buildozer_output.txt || {

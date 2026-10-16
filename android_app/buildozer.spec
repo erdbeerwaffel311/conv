@@ -20,7 +20,7 @@ version = 2.0.0
 
 # (list) Application requirements
 # Comma separated e.g. requirements = sqlite3,kivy
-requirements = python3,kivy,yt-dlp,certifi
+requirements = python3,kivy,charset-normalizer==2.1.1,yt-dlp,certifi
 
 # (str) Presplash of the application
 presplash.filename = %(source.dir)s/icon.png
