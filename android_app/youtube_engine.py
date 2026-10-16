@@ -123,26 +123,8 @@ def download_youtube_media(
     postprocessors = []
 
     if is_audio:
-        # Audio Extraction
-        audio_ext = target_format.lower()
-        if has_ffmpeg:
-            ydl_opts["format"] = "bestaudio/best"
-            pp_audio = {
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": audio_ext,
-            }
-            if target_format == "MP3":
-                bitrate_clean = quality.replace("k", "") if quality.endswith("k") else "320"
-                pp_audio["preferredquality"] = bitrate_clean
-            postprocessors.append(pp_audio)
-
-            if embed_thumbnail and target_format in ["MP3", "M4A", "FLAC"]:
-                ydl_opts["writethumbnail"] = True
-                postprocessors.append({"key": "FFmpegMetadata", "add_metadata": True})
-                postprocessors.append({"key": "EmbedThumbnail", "already_have_thumbnail": False})
-        else:
-            # Standalone Android mode without FFmpeg: download YouTube's native M4A/AAC audio directly
-            ydl_opts["format"] = "bestaudio[ext=m4a]/bestaudio/best"
+        # Standalone reliable audio download without ffprobe dependency
+        ydl_opts["format"] = "bestaudio[ext=m4a]/bestaudio/best"
     else:
         # Video Download
         video_ext = target_format.lower()
@@ -191,6 +173,32 @@ def download_youtube_media(
                 candidate = f"{base_no_ext}.{expected_ext}"
                 if os.path.exists(candidate):
                     final_file = candidate
+
+            # Perform audio conversion if target format differs from downloaded native stream
+            if is_audio and final_file and os.path.exists(final_file):
+                curr_ext = os.path.splitext(final_file)[1].lower().lstrip(".")
+                target_ext = target_format.lower()
+                if curr_ext != target_ext:
+                    ffmpeg_bin = FFMPEG_PATH or find_binary("ffmpeg")
+                    if ffmpeg_bin:
+                        out_target = os.path.splitext(final_file)[0] + f".{target_ext}"
+                        if progress_callback:
+                            progress_callback(95.0, f"Konvertiere in {target_format}...")
+                        import ffmpeg_utils
+                        success, conv_msg = ffmpeg_utils.convert_file(
+                            input_file=final_file,
+                            output_file=out_target,
+                            target_format=target_format,
+                            quality=quality,
+                            progress_callback=progress_callback,
+                            is_cancelled=is_cancelled
+                        )
+                        if success and os.path.exists(out_target):
+                            try:
+                                os.remove(final_file)
+                            except Exception:
+                                pass
+                            final_file = out_target
 
             if progress_callback:
                 progress_callback(100.0, "Fertig!")

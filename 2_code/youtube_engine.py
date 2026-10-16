@@ -11,7 +11,7 @@ for p in ["/opt/homebrew/bin", "/usr/local/bin", os.path.expanduser("~/bin")]:
     if os.path.isdir(p) and p not in os.environ.get("PATH", ""):
         os.environ["PATH"] = f"{p}:{os.environ.get('PATH', '')}"
 
-from ffmpeg_utils import FFMPEG_PATH, find_binary
+from ffmpeg_utils import FFMPEG_PATH, find_binary, convert_file, run_conversion
 
 
 def clean_filename(s: str) -> str:

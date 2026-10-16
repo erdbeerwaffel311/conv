@@ -314,36 +314,18 @@ def build_ffmpeg_command(
     return cmd
 
 
-def convert_file(
-    input_file: str,
-    output_file: str,
-    target_format: str,
-    quality: str = "default",
-    custom_scale: Optional[str] = None,
+def run_conversion(
+    cmd: List[str],
+    duration: float = 0.0,
     progress_callback: Optional[Callable[[float, str], None]] = None,
     is_cancelled: Optional[Callable[[], bool]] = None,
 ) -> Tuple[bool, str]:
     """
-    Executes conversion using FFmpeg with real-time progress parsing.
+    Executes an FFmpeg command with real-time progress parsing.
     Returns (success, message).
     """
-    ffmpeg = FFMPEG_PATH or find_binary("ffmpeg")
-    if not ffmpeg:
-        return False, "FFmpeg wurde nicht gefunden. Bitte installiere FFmpeg via Homebrew ('brew install ffmpeg')."
-
-    if not os.path.isfile(input_file):
-        return False, f"Eingabedatei existiert nicht: {input_file}"
-
-    # Ensure output directory exists
-    out_dir = os.path.dirname(output_file)
-    if out_dir and not os.path.exists(out_dir):
-        os.makedirs(out_dir, exist_ok=True)
-
-    info = get_media_info(input_file)
-    total_duration = info.get("duration", 0.0)
-
-    cmd = build_ffmpeg_command(input_file, output_file, target_format, quality, custom_scale)
-    cmd.extend(["-progress", "pipe:1", "-nostats"])
+    if "-progress" not in cmd:
+        cmd.extend(["-progress", "pipe:1", "-nostats"])
 
     try:
         proc = subprocess.Popen(
@@ -366,8 +348,6 @@ def convert_file(
                     proc.wait(timeout=2)
                 except subprocess.TimeoutExpired:
                     proc.kill()
-                if os.path.exists(output_file):
-                    os.remove(output_file)
                 return False, "Konvertierung abgebrochen."
 
             line = proc.stdout.readline()
@@ -377,21 +357,20 @@ def convert_file(
                 continue
 
             line = line.strip()
-            if total_duration > 0 and progress_callback:
-                # Try out_time_ms
+            if duration > 0 and progress_callback:
                 m_ms = out_time_re.match(line)
                 if m_ms:
                     curr_ms = int(m_ms.group(1))
                     curr_sec = curr_ms / 1_000_000.0
-                    progress = min(99.0, max(0.0, (curr_sec / total_duration) * 100.0))
-                    progress_callback(progress, f"{progress:.1f}% ({int(curr_sec)}s / {int(total_duration)}s)")
+                    progress = min(99.0, max(0.0, (curr_sec / duration) * 100.0))
+                    progress_callback(progress, f"{progress:.1f}% ({int(curr_sec)}s / {int(duration)}s)")
                 else:
                     m_str = out_time_str_re.match(line)
                     if m_str:
                         h, m, s = float(m_str.group(1)), float(m_str.group(2)), float(m_str.group(3))
                         curr_sec = h * 3600 + m * 60 + s
-                        progress = min(99.0, max(0.0, (curr_sec / total_duration) * 100.0))
-                        progress_callback(progress, f"{progress:.1f}% ({int(curr_sec)}s / {int(total_duration)}s)")
+                        progress = min(99.0, max(0.0, (curr_sec / duration) * 100.0))
+                        progress_callback(progress, f"{progress:.1f}% ({int(curr_sec)}s / {int(duration)}s)")
 
         stdout, stderr = proc.communicate()
         if proc.returncode != 0:
@@ -404,3 +383,39 @@ def convert_file(
 
     except Exception as e:
         return False, f"Ausnahmefehler bei der Konvertierung: {str(e)}"
+
+
+def convert_file(
+    input_file: str,
+    output_file: str,
+    target_format: str,
+    quality: str = "default",
+    custom_scale: Optional[str] = None,
+    progress_callback: Optional[Callable[[float, str], None]] = None,
+    is_cancelled: Optional[Callable[[], bool]] = None,
+) -> Tuple[bool, str]:
+    """
+    Executes conversion using FFmpeg with real-time progress parsing.
+    Returns (success, message).
+    """
+    ffmpeg = FFMPEG_PATH or find_binary("ffmpeg")
+    if not ffmpeg:
+        return False, "FFmpeg wurde nicht gefunden."
+
+    if not os.path.isfile(input_file):
+        return False, f"Eingabedatei existiert nicht: {input_file}"
+
+    out_dir = os.path.dirname(output_file)
+    if out_dir and not os.path.exists(out_dir):
+        os.makedirs(out_dir, exist_ok=True)
+
+    info = get_media_info(input_file)
+    total_duration = info.get("duration", 0.0)
+
+    cmd = build_ffmpeg_command(input_file, output_file, target_format, quality, custom_scale)
+    return run_conversion(
+        cmd=cmd,
+        duration=total_duration,
+        progress_callback=progress_callback,
+        is_cancelled=is_cancelled
+    )

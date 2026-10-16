@@ -808,15 +808,11 @@ class AudioVideoScreen(Screen):
 
         def _worker():
             try:
-                cmd = ffmpeg_utils.build_ffmpeg_command(
+                success, msg = ffmpeg_utils.convert_file(
                     input_file=self.selected_file,
                     output_file=out_file,
                     target_format=target_fmt,
-                    quality=quality
-                )
-                success, msg = ffmpeg_utils.run_conversion(
-                    cmd=cmd,
-                    duration=0,
+                    quality=quality,
                     progress_callback=self.update_progress,
                     is_cancelled=lambda: self.is_cancelled
                 )
@@ -1196,7 +1192,7 @@ class InfoScreen(Screen):
 
         t = WrappingLabel(text="Universal Media Converter", font_size="20sp", bold=True)
         v = WrappingLabel(
-            text="Version 2.1.0 (Samsung Galaxy A55 5G Vollversion)",
+            text="Version 2.1.1 (Samsung Galaxy A55 5G Vollversion)",
             font_size="13sp",
             color=(0.4, 0.7, 1, 1)
         )
