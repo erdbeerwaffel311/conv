@@ -35,17 +35,11 @@ orientation = portrait
 android.permissions = INTERNET,ACCESS_NETWORK_STATE,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,READ_MEDIA_AUDIO,READ_MEDIA_VIDEO,READ_MEDIA_IMAGES
 
 # (int) Target Android API, should be as high as possible.
-# Samsung Galaxy A55 5G runs Android 14/15/16 (API 34+)
-android.api = 34
+# (int) Target Android API
+android.api = 33
 
-# (int) Minimum API your APK will support.
-android.minapi = 26
-
-# (int) Android SDK version to use
-android.sdk = 34
-
-# (str) Android NDK version to use
-android.ndk = 25b
+# (int) Minimum API your APK will support
+android.minapi = 24
 
 # (bool) Use --private data storage (True) or --dir public storage (False)
 android.private_storage = True
