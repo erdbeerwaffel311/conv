@@ -20,7 +20,7 @@ version = 2.0.0
 
 # (list) Application requirements
 # Comma separated e.g. requirements = sqlite3,kivy
-requirements = python3,kivy,pillow,yt-dlp,mutagen,requests,urllib3,certifi
+requirements = python3,kivy,yt-dlp,certifi
 
 # (str) Presplash of the application
 presplash.filename = %(source.dir)s/icon.png
@@ -62,7 +62,7 @@ android.release_artifact = apk
 [buildozer]
 
 # (int) Log level (0 = error only, 1 = info, 2 = debug (with command output))
-log_level = 1
+log_level = 2
 
 # (int) Display warning if buildozer is run as root (0 = False, 1 = True)
 warn_on_root = 1

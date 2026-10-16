@@ -47,9 +47,21 @@ jobs:
     - name: Build Android APK with Buildozer
       working-directory: android_app
       run: |
+        if [ -d "/usr/local/lib/android/sdk/ndk/25.2.9519653" ]; then
+          export ANDROID_NDK="/usr/local/lib/android/sdk/ndk/25.2.9519653"
+          export ANDROID_NDK_HOME="/usr/local/lib/android/sdk/ndk/25.2.9519653"
+        else
+          unset ANDROID_NDK ANDROID_NDK_HOME ANDROID_NDK_LATEST_HOME
+        fi
         export CFLAGS="$CFLAGS -Wno-error=incompatible-pointer-types -Wno-error=implicit-function-declaration"
         export CPPFLAGS="$CPPFLAGS -Wno-error=implicit-function-declaration"
-        buildozer android debug
+        buildozer android debug || {
+          echo "=========================================="
+          echo "BUILDOZER FAILED - DIAGNOSTIC LOG DUMP"
+          echo "=========================================="
+          find .buildozer -name "*.log" -exec echo "--- LOG: {} ---" \; -exec tail -n 100 {} \; 2>/dev/null || true
+          exit 1
+        }
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4

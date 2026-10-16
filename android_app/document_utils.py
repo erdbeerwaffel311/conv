@@ -4,12 +4,23 @@ import os
 import sys
 import subprocess
 from typing import Callable, Dict, Optional, Tuple, List
-import pandas as pd
-from pypdf import PdfReader
-from reportlab.lib.pagesizes import letter, A4
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib import colors
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
+
+try:
+    from pypdf import PdfReader
+except ImportError:
+    PdfReader = None
+
+try:
+    from reportlab.lib.pagesizes import letter, A4
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib import colors
+except ImportError:
+    pass
 
 # Compatibility patch for pdf2docx with PyMuPDF >= 1.25
 try:

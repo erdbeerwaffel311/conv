@@ -4,11 +4,13 @@ import os
 import sys
 import subprocess
 from typing import Callable, Dict, Optional, Tuple, List
-from PIL import Image
-import pillow_heif
-
-# Register HEIF opener so PIL natively handles HEIC/HEIF files
-pillow_heif.register_heif_opener()
+try:
+    from PIL import Image
+    import pillow_heif
+    # Register HEIF opener so PIL natively handles HEIC/HEIF files
+    pillow_heif.register_heif_opener()
+except ImportError:
+    Image = None
 
 
 IMAGE_FORMATS = {
