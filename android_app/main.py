@@ -358,6 +358,47 @@ class YouTubeScreen(Screen):
         )
         paste_btn.bind(on_release=self.paste_clipboard)
         input_card.add_widget(paste_btn)
+
+        # Dateinamenübernahme (Video-Titel & Zieldateiname)
+        title_box = BoxLayout(orientation="vertical", spacing=dp(6), size_hint_y=None)
+        title_box.bind(minimum_height=title_box.setter("height"))
+
+        title_header = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(26))
+        lbl_fname_title = WrappingLabel(
+            text="Zieldateiname (Dateinamenübernahme):",
+            font_size="13sp",
+            bold=True,
+            color=(0.85, 0.9, 0.95, 1),
+            halign="left"
+        )
+        btn_fetch = Button(
+            text="Titel laden",
+            size_hint=(None, None),
+            size=(dp(90), dp(26)),
+            background_normal="",
+            background_color=(0.18, 0.22, 0.32, 1),
+            color=(0.85, 0.9, 1, 1),
+            font_size="11sp"
+        )
+        btn_fetch.bind(on_release=lambda _: self.fetch_title_from_url())
+        title_header.add_widget(lbl_fname_title)
+        title_header.add_widget(btn_fetch)
+        title_box.add_widget(title_header)
+
+        self.filename_input = TextInput(
+            hint_text="Wird automatisch von YouTube übernommen...",
+            multiline=False,
+            size_hint_y=None,
+            height=dp(48),
+            background_normal="",
+            background_color=(0.07, 0.08, 0.11, 1),
+            foreground_color=(1, 1, 1, 1),
+            cursor_color=(0.3, 0.6, 1, 1),
+            font_size="13sp",
+            padding=[dp(12), dp(12), dp(12), dp(12)]
+        )
+        title_box.add_widget(self.filename_input)
+        input_card.add_widget(title_box)
         content.add_widget(input_card)
 
         # 3. Format & Qualität Karte
@@ -423,6 +464,59 @@ class YouTubeScreen(Screen):
         grid_opts.add_widget(col_qual)
 
         opts_card.add_widget(grid_opts)
+
+        # 3. Geschwindigkeit / Abspieltempo Schieberegler mit Einrasten
+        speed_box = BoxLayout(orientation="vertical", spacing=dp(6), size_hint_y=None)
+        speed_box.bind(minimum_height=speed_box.setter("height"))
+
+        speed_header = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(26))
+        self.lbl_speed = WrappingLabel(
+            text="Geschwindigkeit: 1.00x (Normal)",
+            font_size="13sp",
+            bold=True,
+            color=(0.4, 0.75, 1, 1)
+        )
+        btn_reset_speed = Button(
+            text="1.0x Reset",
+            size_hint=(None, None),
+            size=(dp(80), dp(26)),
+            background_normal="",
+            background_color=(0.18, 0.22, 0.32, 1),
+            color=(0.85, 0.9, 1, 1),
+            font_size="11sp"
+        )
+        btn_reset_speed.bind(on_release=lambda _: self.reset_speed())
+        speed_header.add_widget(self.lbl_speed)
+        speed_header.add_widget(btn_reset_speed)
+        speed_box.add_widget(speed_header)
+
+        # Slider von 0.25x bis 4.0x mit Einrasten (Schrittweite 0.25x)
+        self.speed_slider = Slider(
+            min=0.25,
+            max=4.0,
+            step=0.25,
+            value=1.0,
+            value_track=True,
+            value_track_color=(0.17, 0.42, 0.95, 1),
+            size_hint_y=None,
+            height=dp(38)
+        )
+        self.speed_slider.bind(value=self.on_speed_change)
+        speed_box.add_widget(self.speed_slider)
+
+        scale_box = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(16))
+        lbl_min = Label(text="0.25x", font_size="10sp", color=(0.5, 0.55, 0.65, 1), halign="left", size_hint_x=0.33)
+        lbl_min.bind(size=lbl_min.setter("text_size"))
+        lbl_mid = Label(text="1.0x (Normal)", font_size="10sp", color=(0.5, 0.55, 0.65, 1), halign="center", size_hint_x=0.34)
+        lbl_mid.bind(size=lbl_mid.setter("text_size"))
+        lbl_max = Label(text="4.0x", font_size="10sp", color=(0.5, 0.55, 0.65, 1), halign="right", size_hint_x=0.33)
+        lbl_max.bind(size=lbl_max.setter("text_size"))
+        scale_box.add_widget(lbl_min)
+        scale_box.add_widget(lbl_mid)
+        scale_box.add_widget(lbl_max)
+        speed_box.add_widget(scale_box)
+
+        opts_card.add_widget(speed_box)
         content.add_widget(opts_card)
 
         # 4. Status & Fortschritt Karte
@@ -547,10 +641,44 @@ class YouTubeScreen(Screen):
             self.qual_spinner.values = ["1080p Full HD", "720p HD", "480p"]
             self.qual_spinner.text = "720p HD"
 
+    def on_speed_change(self, instance, value):
+        val = round(value, 2)
+        if abs(val - 1.0) < 0.05:
+            self.lbl_speed.text = "Geschwindigkeit: 1.00x (Normal)"
+        elif val < 1.0:
+            self.lbl_speed.text = f"Geschwindigkeit: {val:.2f}x (Langsamer)"
+        else:
+            self.lbl_speed.text = f"Geschwindigkeit: {val:.2f}x (Schneller)"
+
+    def reset_speed(self):
+        self.speed_slider.value = 1.0
+        self.lbl_speed.text = "Geschwindigkeit: 1.00x (Normal)"
+
     def paste_clipboard(self, instance):
         text = Clipboard.paste()
         if text:
             self.url_input.text = text.strip()
+            self.fetch_title_from_url()
+
+    def fetch_title_from_url(self):
+        url = self.url_input.text.strip()
+        if not url:
+            return
+        self.lbl_details.text = "Rufe YouTube-Titel ab..."
+        def _fetch_worker():
+            try:
+                meta = youtube_engine.fetch_video_metadata(url)
+                title = meta.get("title")
+                if title and title != url and "error" not in meta:
+                    clean = android_native_picker.sanitize_android_filename(title)
+                    def _update_ui(dt):
+                        if not self.filename_input.text.strip():
+                            self.filename_input.text = clean
+                        self.lbl_details.text = f"Titel übernommen: {clean}"
+                    Clock.schedule_once(_update_ui, 0)
+            except Exception as e:
+                print(f"Failed to fetch metadata: {e}")
+        threading.Thread(target=_fetch_worker, daemon=True).start()
 
     def update_progress(self, pct, text):
         def _update(dt):
@@ -573,8 +701,13 @@ class YouTubeScreen(Screen):
                     "Sichtbar in der Samsung Galerie und 'Eigene Dateien'."
                 )
                 if out_file and os.path.isfile(out_file):
+                    fname = os.path.basename(out_file)
+                    stem = os.path.splitext(fname)[0]
+                    if hasattr(self, 'filename_input') and not self.filename_input.text.strip():
+                        self.filename_input.text = stem
                     android_native_picker.save_file_native(
                         source_file_path=out_file,
+                        default_name=fname,
                         callback=self.on_save_as_completed
                     )
             else:
@@ -586,8 +719,10 @@ class YouTubeScreen(Screen):
         if self.last_downloaded_file and os.path.isfile(self.last_downloaded_file):
             self.lbl_status.text = "Speicherort-Auswahl geöffnet"
             self.lbl_details.text = "Wählen Sie den gewünschten Ordner auf Ihrem Gerät..."
+            fname = os.path.basename(self.last_downloaded_file)
             android_native_picker.save_file_native(
                 source_file_path=self.last_downloaded_file,
+                default_name=fname,
                 callback=self.on_save_as_completed
             )
 
@@ -623,6 +758,8 @@ class YouTubeScreen(Screen):
         out_dir = get_android_download_dir()
         fmt = self.fmt_spinner.text
         qual = self.qual_spinner.text.split()[0]
+        speed = round(self.speed_slider.value, 2)
+        custom_name = self.filename_input.text.strip()
 
         def _worker():
             try:
@@ -631,6 +768,8 @@ class YouTubeScreen(Screen):
                     output_dir=out_dir,
                     target_format=fmt,
                     quality=qual,
+                    speed=speed,
+                    custom_filename=custom_name,
                     embed_thumbnail=True,
                     progress_callback=self.update_progress,
                     is_cancelled=lambda: self.is_cancelled
@@ -920,8 +1059,13 @@ class AudioVideoScreen(Screen):
                 self.lbl_status.text = "Konvertierung erfolgreich!"
                 self.lbl_details.text = f"Gespeichert in:\n{out_file}"
                 if out_file and os.path.isfile(out_file):
+                    fname = os.path.basename(out_file)
+                    stem = os.path.splitext(fname)[0]
+                    if hasattr(self, 'filename_input') and not self.filename_input.text.strip():
+                        self.filename_input.text = stem
                     android_native_picker.save_file_native(
                         source_file_path=out_file,
+                        default_name=fname,
                         callback=self.on_save_as_completed
                     )
             else:
@@ -1179,8 +1323,13 @@ class ImageScreen(Screen):
                 self.lbl_status.text = "Bild erfolgreich konvertiert!"
                 self.lbl_details.text = f"Gespeichert in:\n{out_file}\nIn Galerie und 'Eigene Dateien' sichtbar."
                 if out_file and os.path.isfile(out_file):
+                    fname = os.path.basename(out_file)
+                    stem = os.path.splitext(fname)[0]
+                    if hasattr(self, 'filename_input') and not self.filename_input.text.strip():
+                        self.filename_input.text = stem
                     android_native_picker.save_file_native(
                         source_file_path=out_file,
+                        default_name=fname,
                         callback=self.on_save_as_completed
                     )
             else:
@@ -1397,8 +1546,13 @@ class DocumentScreen(Screen):
                 self.lbl_status.text = "Konvertierung erfolgreich abgeschlossen!"
                 self.lbl_details.text = f"Gespeichert in:\n{out_file}"
                 if out_file and os.path.isfile(out_file):
+                    fname = os.path.basename(out_file)
+                    stem = os.path.splitext(fname)[0]
+                    if hasattr(self, 'filename_input') and not self.filename_input.text.strip():
+                        self.filename_input.text = stem
                     android_native_picker.save_file_native(
                         source_file_path=out_file,
+                        default_name=fname,
                         callback=self.on_save_as_completed
                     )
             else:
@@ -1482,7 +1636,7 @@ class InfoScreen(Screen):
 
         t = WrappingLabel(text="Universal Media Converter", font_size="20sp", bold=True)
         v = WrappingLabel(
-            text="Version 2.2.0 (Samsung Galaxy A55 5G Vollversion)",
+            text="Version 2.3.0 (Samsung Galaxy A55 5G Vollversion)",
             font_size="13sp",
             color=(0.4, 0.7, 1, 1)
         )

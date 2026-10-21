@@ -16,7 +16,7 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,json
 
 # (str) Application versioning (method 1)
-version = 2.2.0
+version = 2.3.0
 
 # (list) Application requirements
 # Comma separated e.g. requirements = sqlite3,kivy

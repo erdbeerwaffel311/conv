@@ -41,22 +41,43 @@ def get_ydl_base_opts() -> Dict[str, Any]:
 
 def fetch_video_metadata(url: str) -> Dict[str, Any]:
     """Fetch video title and basic info quickly without downloading."""
+    clean_url = url.strip()
+    # 1. Fast oEmbed attempt (sub-second, reliable, no bot blocks)
+    try:
+        import urllib.request
+        import urllib.parse
+        import json
+        norm_url = re.sub(r'youtube\.com/shorts/([a-zA-Z0-9_-]+)', r'youtube.com/watch?v=\1', clean_url)
+        oembed_url = f"https://www.youtube.com/oembed?url={urllib.parse.quote(norm_url, safe=':/?=&')}&format=json"
+        req = urllib.request.Request(oembed_url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=3.5) as r:
+            data = json.loads(r.read().decode("utf-8"))
+            if data.get("title"):
+                return {
+                    "title": data["title"],
+                    "uploader": data.get("author_name", ""),
+                    "duration": 0
+                }
+    except Exception:
+        pass
+
+    # 2. yt-dlp flat extract fallback
     ydl_opts = get_ydl_base_opts()
     ydl_opts.update({
         "skip_download": True,
-        "extract_flat": "in_playlist",
+        "extract_flat": True,
     })
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
+            info = ydl.extract_info(clean_url, download=False)
             if "entries" in info:  # Playlist
                 title = f"Playlist: {info.get('title', 'YouTube Playlist')} ({len(info['entries'])} Videos)"
             else:
-                title = info.get("title", url)
+                title = info.get("title", clean_url)
             return {"title": title, "duration": info.get("duration", 0), "uploader": info.get("uploader", "")}
     except Exception as e:
-        return {"title": url, "error": str(e)}
+        return {"title": clean_url, "error": str(e)}
 
 
 def download_youtube_media(
@@ -64,6 +85,8 @@ def download_youtube_media(
     output_dir: str,
     target_format: str = "MP3",
     quality: str = "320k",
+    speed: float = 1.0,
+    custom_filename: Optional[str] = None,
     embed_thumbnail: bool = True,
     progress_callback: Optional[Callable[[float, str], None]] = None,
     is_cancelled: Optional[Callable[[], bool]] = None,
@@ -174,44 +197,59 @@ def download_youtube_media(
                 if os.path.exists(candidate):
                     final_file = candidate
 
-            # Perform audio conversion if target format differs from downloaded native stream
-            if is_audio and final_file and os.path.exists(final_file):
-                curr_ext = os.path.splitext(final_file)[1].lower().lstrip(".")
-                target_ext = target_format.lower()
-                if curr_ext != target_ext:
-                    ffmpeg_bin = FFMPEG_PATH or find_binary("ffmpeg")
-                    if ffmpeg_bin:
-                        out_target = os.path.splitext(final_file)[0] + f".{target_ext}"
-                        if progress_callback:
-                            progress_callback(95.0, f"Konvertiere in {target_format}...")
-                        import ffmpeg_utils
-                        success, conv_msg = ffmpeg_utils.convert_file(
-                            input_file=final_file,
-                            output_file=out_target,
-                            target_format=target_format,
-                            quality=quality,
-                            progress_callback=progress_callback,
-                            is_cancelled=is_cancelled
-                        )
-                        if success and os.path.exists(out_target):
-                            try:
-                                os.remove(final_file)
-                            except Exception:
-                                pass
-                            final_file = out_target
+            # Perform conversion/speed adjustment if format differs or speed != 1.0
+            speed_applied = abs(speed - 1.0) > 0.01
+            target_ext = target_format.lower()
+            curr_ext = os.path.splitext(final_file)[1].lower().lstrip(".") if final_file else ""
+
+            needs_ffmpeg = (is_audio and curr_ext != target_ext) or speed_applied
+            if needs_ffmpeg and final_file and os.path.exists(final_file):
+                ffmpeg_bin = FFMPEG_PATH or find_binary("ffmpeg")
+                if ffmpeg_bin:
+                    if progress_callback:
+                        speed_info = f" ({speed:.2f}x)" if speed_applied else ""
+                        progress_callback(95.0, f"Passe Geschwindigkeit{speed_info} & Format ({target_format}) an...")
+                    import ffmpeg_utils
+                    base_dir = os.path.dirname(final_file)
+                    base_stem = os.path.splitext(os.path.basename(final_file))[0]
+                    out_target = os.path.join(base_dir, f"{base_stem}_proc.{target_ext}")
+                    if os.path.exists(out_target):
+                        try:
+                            os.remove(out_target)
+                        except Exception:
+                            pass
+                    success, conv_msg = ffmpeg_utils.convert_file(
+                        input_file=final_file,
+                        output_file=out_target,
+                        target_format=target_format,
+                        quality=quality,
+                        speed=speed,
+                        progress_callback=progress_callback,
+                        is_cancelled=is_cancelled
+                    )
+                    if success and os.path.exists(out_target):
+                        try:
+                            os.remove(final_file)
+                        except Exception:
+                            pass
+                        final_file = out_target
 
             if progress_callback:
                 progress_callback(100.0, "Fertig!")
 
-            # Ensure the output file has the clean YouTube title without illegal characters
+            # Ensure the output file has the clean YouTube / custom title without illegal characters
             if final_file and os.path.exists(final_file):
                 try:
                     from android_native_picker import sanitize_android_filename
-                    raw_title = info.get("title") or os.path.splitext(os.path.basename(final_file))[0]
-                    clean_title = sanitize_android_filename(raw_title)
+                    chosen_title = custom_filename.strip() if custom_filename and custom_filename.strip() else (info.get("title") or os.path.splitext(os.path.basename(final_file))[0])
+                    # If extension was included in title, strip it before sanitization
+                    stem, maybe_ext = os.path.splitext(chosen_title)
+                    if maybe_ext.lower().lstrip(".") in ["mp3", "m4a", "wav", "flac", "aac", "ogg", "opus", "mp4", "mkv", "mov", "webm", "avi"]:
+                        chosen_title = stem
+                    clean_title = sanitize_android_filename(chosen_title)
                     curr_ext = os.path.splitext(final_file)[1].lstrip(".")
                     target_ext = target_format.lower()
-                    effective_ext = target_ext if target_ext in ["mp3", "m4a", "wav", "flac", "aac", "ogg", "opus", "mp4", "mkv", "mov", "webm"] else curr_ext
+                    effective_ext = target_ext if target_ext in ["mp3", "m4a", "wav", "flac", "aac", "ogg", "opus", "mp4", "mkv", "mov", "webm", "avi"] else curr_ext
                     if effective_ext == "jpeg":
                         effective_ext = "jpg"
                     desired_path = os.path.join(output_dir, f"{clean_title}.{effective_ext}")
