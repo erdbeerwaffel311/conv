@@ -31,6 +31,8 @@ from kivy.uix.label import Label
 from kivy.uix.textinput import TextInput
 from kivy.uix.spinner import Spinner, SpinnerOption
 from kivy.uix.progressbar import ProgressBar
+from kivy.uix.slider import Slider
+from android_native_picker import sanitize_android_filename
 from kivy.uix.screenmanager import ScreenManager, Screen, FadeTransition
 from kivy.uix.popup import Popup
 from kivy.uix.filechooser import FileChooserListView
@@ -740,6 +742,59 @@ class AudioVideoScreen(Screen):
         grid.add_widget(col2)
 
         card_opts.add_widget(grid)
+
+        # 3. Geschwindigkeit / Abspieltempo Schieberegler mit Einrasten
+        speed_box = BoxLayout(orientation="vertical", spacing=dp(6), size_hint_y=None)
+        speed_box.bind(minimum_height=speed_box.setter("height"))
+
+        speed_header = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(26))
+        self.lbl_speed = WrappingLabel(
+            text="Geschwindigkeit: 1.00x (Normal)",
+            font_size="13sp",
+            bold=True,
+            color=(0.4, 0.75, 1, 1)
+        )
+        btn_reset_speed = Button(
+            text="1.0x Reset",
+            size_hint=(None, None),
+            size=(dp(80), dp(26)),
+            background_normal="",
+            background_color=(0.18, 0.22, 0.32, 1),
+            color=(0.85, 0.9, 1, 1),
+            font_size="11sp"
+        )
+        btn_reset_speed.bind(on_release=lambda _: self.reset_speed())
+        speed_header.add_widget(self.lbl_speed)
+        speed_header.add_widget(btn_reset_speed)
+        speed_box.add_widget(speed_header)
+
+        # Slider von 0.25x bis 4.0x mit Einrasten (Schrittweite 0.25x)
+        self.speed_slider = Slider(
+            min=0.25,
+            max=4.0,
+            step=0.25,
+            value=1.0,
+            value_track=True,
+            value_track_color=(0.17, 0.42, 0.95, 1),
+            size_hint_y=None,
+            height=dp(38)
+        )
+        self.speed_slider.bind(value=self.on_speed_change)
+        speed_box.add_widget(self.speed_slider)
+
+        scale_box = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(16))
+        lbl_min = Label(text="0.25x", font_size="10sp", color=(0.5, 0.55, 0.65, 1), halign="left", size_hint_x=0.33)
+        lbl_min.bind(size=lbl_min.setter("text_size"))
+        lbl_mid = Label(text="1.0x (Normal)", font_size="10sp", color=(0.5, 0.55, 0.65, 1), halign="center", size_hint_x=0.34)
+        lbl_mid.bind(size=lbl_mid.setter("text_size"))
+        lbl_max = Label(text="4.0x", font_size="10sp", color=(0.5, 0.55, 0.65, 1), halign="right", size_hint_x=0.33)
+        lbl_max.bind(size=lbl_max.setter("text_size"))
+        scale_box.add_widget(lbl_min)
+        scale_box.add_widget(lbl_mid)
+        scale_box.add_widget(lbl_max)
+        speed_box.add_widget(scale_box)
+
+        card_opts.add_widget(speed_box)
         content.add_widget(card_opts)
 
         # Status & Fortschritt
@@ -828,6 +883,19 @@ class AudioVideoScreen(Screen):
             self.fmt_spinner.text = default_fmt
         self.lbl_details.text = "Datei geladen. Wählen Sie Zielformat und Qualität."
 
+    def on_speed_change(self, instance, value):
+        val = round(value, 2)
+        if abs(val - 1.0) < 0.05:
+            self.lbl_speed.text = "Geschwindigkeit: 1.00x (Normal)"
+        elif val < 1.0:
+            self.lbl_speed.text = f"Geschwindigkeit: {val:.2f}x (Langsamer)"
+        else:
+            self.lbl_speed.text = f"Geschwindigkeit: {val:.2f}x (Schneller)"
+
+    def reset_speed(self):
+        self.speed_slider.value = 1.0
+        self.lbl_speed.text = "Geschwindigkeit: 1.00x (Normal)"
+
     def on_format_change(self, spinner, text):
         presets = format_detector.get_quality_presets(text)
         if presets:
@@ -898,11 +966,22 @@ class AudioVideoScreen(Screen):
         self.lbl_status.text = "Konvertierung startet..."
 
         out_dir = get_android_download_dir()
-        base_name = os.path.splitext(os.path.basename(self.selected_file))[0]
+        orig_base = os.path.splitext(os.path.basename(self.selected_file))[0]
+        if orig_base.endswith("_konvertiert"):
+            orig_base = orig_base[:-12]
+        clean_base = sanitize_android_filename(orig_base)
         target_fmt = self.fmt_spinner.text
         ext = target_fmt.lower()
-        out_file = os.path.join(out_dir, f"{base_name}_konvertiert.{ext}")
+        if ext == "jpeg":
+            ext = "jpg"
+        out_file = os.path.join(out_dir, f"{clean_base}.{ext}")
+        if os.path.abspath(out_file) == os.path.abspath(self.selected_file):
+            out_file = os.path.join(out_dir, f"{clean_base}_neu.{ext}")
+
         quality = self.qual_spinner.text.split()[0]
+        speed = round(float(self.speed_slider.value), 2)
+        if abs(speed - 1.0) > 0.01:
+            self.lbl_status.text = f"Konvertierung startet ({speed:.2f}x Tempo)..."
 
         def _worker():
             try:
@@ -911,6 +990,7 @@ class AudioVideoScreen(Screen):
                     output_file=out_file,
                     target_format=target_fmt,
                     quality=quality,
+                    speed=speed,
                     progress_callback=self.update_progress,
                     is_cancelled=lambda: self.is_cancelled
                 )
@@ -1143,12 +1223,17 @@ class ImageScreen(Screen):
         self.lbl_status.text = "Konvertiere Bild..."
 
         out_dir = get_android_download_dir()
-        base_name = os.path.splitext(os.path.basename(self.selected_file))[0]
+        orig_base = os.path.splitext(os.path.basename(self.selected_file))[0]
+        if orig_base.endswith("_konvertiert"):
+            orig_base = orig_base[:-12]
+        clean_base = sanitize_android_filename(orig_base)
         target_fmt = self.fmt_spinner.text
         ext = target_fmt.lower()
         if ext == "jpeg":
             ext = "jpg"
-        out_file = os.path.join(out_dir, f"{base_name}_konvertiert.{ext}")
+        out_file = os.path.join(out_dir, f"{clean_base}.{ext}")
+        if os.path.abspath(out_file) == os.path.abspath(self.selected_file):
+            out_file = os.path.join(out_dir, f"{clean_base}_neu.{ext}")
         quality = self.qual_spinner.text
 
         def _worker():
@@ -1356,10 +1441,15 @@ class DocumentScreen(Screen):
         self.lbl_status.text = "Konvertiere Dokument..."
 
         out_dir = get_android_download_dir()
-        base_name = os.path.splitext(os.path.basename(self.selected_file))[0]
+        orig_base = os.path.splitext(os.path.basename(self.selected_file))[0]
+        if orig_base.endswith("_konvertiert"):
+            orig_base = orig_base[:-12]
+        clean_base = sanitize_android_filename(orig_base)
         target_fmt = self.fmt_spinner.text
         ext = target_fmt.lower()
-        out_file = os.path.join(out_dir, f"{base_name}_konvertiert.{ext}")
+        out_file = os.path.join(out_dir, f"{clean_base}.{ext}")
+        if os.path.abspath(out_file) == os.path.abspath(self.selected_file):
+            out_file = os.path.join(out_dir, f"{clean_base}_neu.{ext}")
 
         def _worker():
             try:
@@ -1392,7 +1482,7 @@ class InfoScreen(Screen):
 
         t = WrappingLabel(text="Universal Media Converter", font_size="20sp", bold=True)
         v = WrappingLabel(
-            text="Version 2.1.3 (Samsung Galaxy A55 5G Vollversion)",
+            text="Version 2.2.0 (Samsung Galaxy A55 5G Vollversion)",
             font_size="13sp",
             color=(0.4, 0.7, 1, 1)
         )
@@ -1405,6 +1495,7 @@ class InfoScreen(Screen):
                 "   - Videos in Full HD (1080p), HD (720p) oder 480p\n\n"
                 "2. Audio & Video Konverter:\n"
                 "   - Konvertierung zwischen MP4, MOV, MKV, MP3, WAV, FLAC, AAC, M4A, OGG, OPUS und GIF\n"
+                "   - Schieberegler für Geschwindigkeit (0.25x bis 4.0x mit Einrasten)\n"
                 "   - Integrierter FFmpeg-Beschleuniger für 64-Bit ARM\n\n"
                 "3. Bild-Konverter:\n"
                 "   - Umwandlung von JPEG, PNG, WEBP, BMP, GIF, ICO, TIFF und PDF\n"

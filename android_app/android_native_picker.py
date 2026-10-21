@@ -4,6 +4,7 @@ Enables native file open dialog (ACTION_OPEN_DOCUMENT) and native save dialog (A
 """
 
 import os
+import re
 import threading
 from typing import Callable, Optional
 
@@ -33,6 +34,25 @@ def _get_next_req_id(base):
     global _req_counter
     _req_counter = (_req_counter + 1) % 900
     return base + _req_counter
+
+
+def sanitize_android_filename(name: str) -> str:
+    """
+    Sanitizes a filename so Samsung One UI and Android SAF accept it without '(invalid)'.
+    Replaces / \ : * ? " < > | with hyphens, removes control characters, trims spaces and dots.
+    """
+    if not name:
+        return "datei"
+    s = re.sub(r'[\/\\:\*?"<>|]', '-', str(name))
+    s = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', s)
+    s = re.sub(r'-\s*-+', '-', s)
+    s = re.sub(r'\s+', ' ', s)
+    s = s.strip(' .-_')
+    if not s:
+        return "datei"
+    if len(s.encode("utf-8")) > 200:
+        s = s[:80]
+    return s
 
 
 def _guess_mime_type(filename: str) -> str:
@@ -143,9 +163,13 @@ def _copy_content_uri_to_cache(uri) -> Optional[str]:
             if cursor is not None:
                 cursor.close()
 
+        base, ext = os.path.splitext(display_name)
+        clean_base = sanitize_android_filename(base)
+        clean_name = f"{clean_base}{ext}" if ext else clean_base
+
         cache_dir = activity_obj.getCacheDir().getAbsolutePath()
         os.makedirs(cache_dir, exist_ok=True)
-        dest_path = os.path.join(cache_dir, display_name)
+        dest_path = os.path.join(cache_dir, clean_name)
 
         input_stream = content_resolver.openInputStream(uri)
         if input_stream is None:
@@ -292,16 +316,20 @@ def save_file_native(
     """
     Öffnet den nativen Android 'Speichern unter'-Dialog (ACTION_CREATE_DOCUMENT).
     Der Nutzer wählt den Zielordner und Dateinamen auf seinem Samsung-Gerät aus.
+    Stellt sicher, dass Dateinamen sauber bereinigt und mit korrekter Dateiendung
+    übergeben werden, sodass Samsung One UI niemals '(invalid)' anzeigt.
     """
     if not IS_ANDROID or not os.path.isfile(source_file_path):
         return False
 
     try:
-        filename = default_name or os.path.basename(source_file_path)
-        resolved_mime = mime_type if mime_type else _guess_mime_type(filename)
+        raw_name = default_name or os.path.basename(source_file_path)
+        base, ext = os.path.splitext(raw_name)
+        clean_base = sanitize_android_filename(base)
+        clean_ext = ext if ext else ""
+        clean_filename = f"{clean_base}{clean_ext}"
 
-        base_title, ext = os.path.splitext(filename)
-        title_to_set = base_title if (ext and resolved_mime != "*/*") else filename
+        resolved_mime = mime_type if mime_type else _guess_mime_type(clean_filename)
 
         req_id = _get_next_req_id(REQ_SAVE_BASE)
         _save_callbacks[req_id] = callback
@@ -311,7 +339,8 @@ def save_file_native(
         intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
         intent.addCategory(Intent.CATEGORY_OPENABLE)
         intent.setType(resolved_mime)
-        intent.putExtra(Intent.EXTRA_TITLE, title_to_set)
+        # Übergebe sauberen Dateinamen inklusive Endung an EXTRA_TITLE
+        intent.putExtra(Intent.EXTRA_TITLE, clean_filename)
 
         activity_obj.startActivityForResult(intent, req_id)
         return True

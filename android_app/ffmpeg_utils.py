@@ -257,16 +257,35 @@ VIDEO_FORMATS = {
 }
 
 
+def build_audio_speed_filter(speed: float) -> str:
+    """Build atempo filter chain for audio. atempo only supports 0.5 to 2.0 per instance."""
+    if abs(speed - 1.0) < 0.01:
+        return ""
+    filters = []
+    rem = speed
+    while rem > 2.0:
+        filters.append("atempo=2.0")
+        rem /= 2.0
+    while rem < 0.5:
+        filters.append("atempo=0.5")
+        rem /= 0.5
+    filters.append(f"atempo={rem:.4f}")
+    return ",".join(filters)
+
+
 def build_ffmpeg_command(
     input_file: str,
     output_file: str,
     target_format: str,
     quality: str = "default",
     custom_scale: Optional[str] = None,
+    speed: float = 1.0,
 ) -> List[str]:
-    """Build FFmpeg command argument list based on input and target format."""
+    """Build FFmpeg command argument list based on input, target format, and playback speed."""
     ffmpeg = FFMPEG_PATH or find_binary("ffmpeg") or "ffmpeg"
     cmd = [ffmpeg, "-y", "-i", input_file]
+
+    speed_applied = abs(speed - 1.0) > 0.01
 
     # Audio conversions
     if target_format.upper() in AUDIO_FORMATS:
@@ -276,14 +295,18 @@ def build_ffmpeg_command(
         effective_quality = quality if quality != "default" else cfg.get("default_quality", "Lossless")
         if effective_quality != "Lossless" and effective_quality.endswith("k"):
             cmd.extend(["-b:a", effective_quality])
+        if speed_applied:
+            af = build_audio_speed_filter(speed)
+            if af:
+                cmd.extend(["-af", af])
         cmd.append(output_file)
         return cmd
 
     # Video to GIF
     if target_format.upper() == "GIF":
         fps = 30 if "30" in quality else 15
-        # High quality palettegen filter
-        vf = f"fps={fps},scale=480:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse"
+        speed_prefix = f"setpts=PTS/{speed:.4f}," if speed_applied else ""
+        vf = f"{speed_prefix}fps={fps},scale=480:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse"
         cmd.extend(["-vf", vf, output_file])
         return cmd
 
@@ -293,14 +316,25 @@ def build_ffmpeg_command(
         cmd.extend(["-c:v", cfg["vcodec"]])
         cmd.extend(["-c:a", cfg["acodec"]])
 
-        # Preset scaling if requested
+        vf_filters = []
         if custom_scale and custom_scale != "Original":
             if custom_scale == "1080p":
-                cmd.extend(["-vf", "scale=-2:1080"])
+                vf_filters.append("scale=-2:1080")
             elif custom_scale == "720p":
-                cmd.extend(["-vf", "scale=-2:720"])
+                vf_filters.append("scale=-2:720")
             elif custom_scale == "480p":
-                cmd.extend(["-vf", "scale=-2:480"])
+                vf_filters.append("scale=-2:480")
+
+        if speed_applied:
+            vf_filters.append(f"setpts=PTS/{speed:.4f}")
+
+        if vf_filters:
+            cmd.extend(["-vf", ",".join(vf_filters)])
+
+        if speed_applied:
+            af = build_audio_speed_filter(speed)
+            if af:
+                cmd.extend(["-af", af])
 
         # Compatibility flags for MP4/MOV
         if cfg["ext"] in ["mp4", "mov"]:
@@ -391,6 +425,7 @@ def convert_file(
     target_format: str,
     quality: str = "default",
     custom_scale: Optional[str] = None,
+    speed: float = 1.0,
     progress_callback: Optional[Callable[[float, str], None]] = None,
     is_cancelled: Optional[Callable[[], bool]] = None,
 ) -> Tuple[bool, str]:
@@ -411,11 +446,12 @@ def convert_file(
 
     info = get_media_info(input_file)
     total_duration = info.get("duration", 0.0)
+    effective_duration = total_duration / speed if (speed > 0 and total_duration > 0) else total_duration
 
-    cmd = build_ffmpeg_command(input_file, output_file, target_format, quality, custom_scale)
+    cmd = build_ffmpeg_command(input_file, output_file, target_format, quality, custom_scale, speed=speed)
     return run_conversion(
         cmd=cmd,
-        duration=total_duration,
+        duration=effective_duration,
         progress_callback=progress_callback,
         is_cancelled=is_cancelled
     )

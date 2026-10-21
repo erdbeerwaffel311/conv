@@ -25,7 +25,7 @@ def get_ydl_base_opts() -> Dict[str, Any]:
     opts = {
         "quiet": True,
         "no_warnings": True,
-        "windowsfilenames": False,
+        "windowsfilenames": True,
         "restrictfilenames": False,
         # Bypass YouTube SABR / bot challenge by using iOS/Android/mweb player clients
         "extractor_args": {
@@ -202,6 +202,27 @@ def download_youtube_media(
 
             if progress_callback:
                 progress_callback(100.0, "Fertig!")
+
+            # Ensure the output file has the clean YouTube title without illegal characters
+            if final_file and os.path.exists(final_file):
+                try:
+                    from android_native_picker import sanitize_android_filename
+                    raw_title = info.get("title") or os.path.splitext(os.path.basename(final_file))[0]
+                    clean_title = sanitize_android_filename(raw_title)
+                    curr_ext = os.path.splitext(final_file)[1].lstrip(".")
+                    target_ext = target_format.lower()
+                    effective_ext = target_ext if target_ext in ["mp3", "m4a", "wav", "flac", "aac", "ogg", "opus", "mp4", "mkv", "mov", "webm"] else curr_ext
+                    if effective_ext == "jpeg":
+                        effective_ext = "jpg"
+                    desired_path = os.path.join(output_dir, f"{clean_title}.{effective_ext}")
+                    if os.path.abspath(final_file) != os.path.abspath(desired_path):
+                        if os.path.exists(desired_path):
+                            os.remove(desired_path)
+                        os.rename(final_file, desired_path)
+                        final_file = desired_path
+                except Exception as e:
+                    print(f"Failed to rename YouTube media to clean title: {e}")
+
             return True, "Download und Konvertierung erfolgreich abgeschlossen.", final_file
     except Exception as e:
         err = str(e)
